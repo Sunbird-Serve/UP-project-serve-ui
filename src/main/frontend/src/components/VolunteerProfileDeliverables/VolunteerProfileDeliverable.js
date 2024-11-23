@@ -219,6 +219,15 @@ const VolunteerProfileDeliverable = props => {
       console.log('Volunteer hours updated');
       setVolunteerHrs(volunteerHrs + 1); // Update local state
       setDstat(!dstat); // Trigger re-render to reflect changes
+      return axios.put(`${configData.VOLUNTEER_HOURS}/${userId}/needDeliverableId/${item.id}`, {
+        "deliveryHours": 1,
+        "deliveryDate": new Date().toISOString() // Use current date and time in ISO format
+      }, {
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
     })
     .catch(error => {
       console.log('Error completing deliverable or updating volunteer hours', error);
@@ -284,19 +293,35 @@ const VolunteerProfileDeliverable = props => {
                 <div className="itemNVP">
                     <span>Time :</span> { inParas.length ? formatTime(inParas[0].startTime)+' - '+formatTime(inParas[0].endTime) : ''}
                 </div> 
-                {/* <div className="itemNVP">
-                    <span>Mode</span> : Online
-                </div> */}
+                <div className="itemNVP"> 
+                   <span>Content Resources: </span>  
+                   {inParas.length && inParas[0].resourceUrl ? (
+            <a href={inParas[0].resourceUrl} target="_blank" rel="noopener noreferrer">
+                Resource Link
+            </a>
+        ) : <a href="https://serve-jcms.evean.net/home/view_course/"> View  </a>}
+                  
+                </div> 
             </div>
             <div className="rowNVP">
-                <div className="itemNVP">
-                    <span>Platform :</span> {inParas.length ? inParas[0].softwarePlatform : ''}
-                </div> 
+            <div className="itemNVP">
+  <span>Platform :</span> 
+  {inParas.length && inParas[0].softwarePlatform 
+    ? (inParas[0].inputUrl === "To be added soon" 
+        ? "Available Shortly" 
+        : inParas[0].softwarePlatform)
+    : ""}
+</div>
                 <div className="itemNVP"> 
-                    {/* <span>URL: </span>  <a > Session Link  </a> */}
-                    <span>URL: </span>  {inParas.length ? inParas[0].inputUrl : ''}
-
-                </div> 
+  <span>URL: </span> 
+  {inParas.length && inParas[0].inputUrl && inParas[0].inputUrl !== "To be added soon" ? (
+  <a href={inParas[0].inputUrl} target="_blank" rel="noopener noreferrer">
+    Session Link
+  </a>
+) : (
+  <span>Available Shortly</span>
+)}
+</div>
             </div>
         </div>
 

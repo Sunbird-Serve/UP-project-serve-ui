@@ -57,10 +57,14 @@ function VPNominations() {
      console.log(error)
     })
 
-    axios.get(`${configData.SERVE_VOLUNTEERING}/volunteer/volunteer-hours/read/${userId}`)
+    axios.get(`${configData.SERVE_VOLUNTEERING}/${userId}`)
     .then(response => {
-      console.log(response.data.totalHours)
-      setVolunteerHrs(response.data.totalHours)
+      console.log(response.data);
+      // Extract the numerical value from the response string
+      const hrsMatch = response.data.match(/Total volunteer hours for .+ is (\d+(\.\d+)?)/);
+      if (hrsMatch) {
+        setVolunteerHrs(hrsMatch[1]); // Set only the matched number part, e.g., 1.0
+      }
     })
     .catch(function (error) {
       console.log(error)
@@ -180,6 +184,7 @@ function VPNominations() {
             <div className={`${activeTab === 'tabA' ? 'VNomTabA selectedVNomTab' : 'VNomTabA'}`} onClick={() => handleTabClick('tabA')}>Approved</div>
           </div>
     
+          
           <div className="selectDateAndNeed">
             <div className="selectDate">
               <i className="nSortDateIcon"><CalendarTodayIcon style={{fontSize:"18px",margin:"0px 3px"}} /></i>
@@ -203,8 +208,15 @@ function VPNominations() {
           </div>
         </div>
 
+        {activeTab === 'tabN' && nominations.filter(item => item.nominationStatus === "Nominated").length === 0 && (
+  <div className="emptyState">
+    No nominated needs available. Please check the <strong>Approved</strong> tab.
+  </div>
+)}
         {/* Nominations Display */}
         <div className="nomination-grid">
+
+          
           {nomsFiltered && nomsFiltered.map(nomination => (
             <div key={nomination.id} className="nomination-item">
               <div className="needItemVolunteer">
