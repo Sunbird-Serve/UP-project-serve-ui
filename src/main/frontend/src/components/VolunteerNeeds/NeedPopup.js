@@ -119,6 +119,15 @@ function NeedPopup({ open, onClose, need }) {
     return (hour % 12 || 12) + ":" + minute + (hour < 12 ? "AM" : "PM");
   }
 
+  // Function to safely extract text from description (handles HTML tags)
+  const formatDescription = (description) => {
+    if (!description) return '';
+    // Remove HTML tags if present
+    const text = description.replace(/<[^>]*>/g, '');
+    // Trim whitespace
+    return text.trim();
+  }
+
   return (
     <div className={`need-popup ${open ? "open" : ""}`}>
       {/*Nomination Popup*/}
@@ -149,7 +158,7 @@ function NeedPopup({ open, onClose, need }) {
         <p className="notification-needpopup">Hurry! Nominations will be closed soon</p>
         {/* <div className="aboutHeading">About</div> */}
         <p className="popupNKey">About the Need </p>
-        <p className="popupNValue">{ (need.need && need.need.description) ? need.need.description.slice(3,-4) : '' }</p>
+        <p className="popupNValue">{need.need?.description ? formatDescription(need.need.description) : ''}</p>
         <p className="popupNKey">Need Type </p>
         <p>{need.needType.name} </p>
         <div className="date-container">
@@ -171,8 +180,12 @@ function NeedPopup({ open, onClose, need }) {
         </div>
         <p className="popupNKey">Entity Name </p>
         <p>{ formatEntityName(need.entity.name) }</p>
-        <p className="popupNKey">Skills Required</p>
-        <p className="popupNValue">{ (need.needRequirement && need.needRequirement.skillDetails)? need.needRequirement.skillDetails : '' }</p>
+        {need.needRequirement?.skillDetails && (
+          <>
+            <p className="popupNKey">Skills Required</p>
+            <p className="popupNValue">{need.needRequirement.skillDetails}</p>
+          </>
+        )}
         </div>
         <div className="inviteToEvent">
             <ShareIcon style={{ fontSize: "15px" }} />
