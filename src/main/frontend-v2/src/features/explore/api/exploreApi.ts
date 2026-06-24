@@ -13,6 +13,7 @@ export interface AvailableNeed {
   needType?: { id: string; name: string };
   occurrence?: { startDate?: string; endDate?: string; days?: string; timeSlots?: { day: string; startTime: string; endTime: string }[] };
   requirement?: { skillDetails?: string; schedule?: { days?: string; timeSlots?: { day: string; startTime: string; endTime: string }[] } };
+  timeSlots?: { day: string; startTime: string; endTime: string }[];
   // Nested format support
   need?: { id: string; name: string; status: string; entityId?: string };
 }
@@ -58,12 +59,11 @@ export const exploreApi = baseApi.injectEndpoints({
     }),
 
     // Self-nominate for a need
-    // POST /api/v1/serve-fulfill/nomination/nominate
+    // POST /api/v1/serve-fulfill/nomination/{needId}/nominate/{userId}
     selfNominate: builder.mutation<unknown, { needId: string; userId: string }>({
       query: ({ needId, userId }) => ({
-        url: '/api/v1/serve-fulfill/nomination/nominate',
+        url: `/api/v1/serve-fulfill/nomination/${needId}/nominate/${userId}`,
         method: 'POST',
-        body: { needId, nominatedUserId: userId, nominationStatus: 'Nominated' },
       }),
       invalidatesTags: ['Nomination'],
     }),

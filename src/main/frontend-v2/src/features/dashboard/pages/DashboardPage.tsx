@@ -1,5 +1,7 @@
 import { Box, CircularProgress } from '@mui/material';
 import { useAppSelector } from '@app/store';
+import { useAuth } from '@features/auth';
+import { Navigate } from 'react-router-dom';
 import { NCoordinatorDashboard } from './NCoordinatorDashboard';
 import { NAdminDashboard } from './NAdminDashboard';
 import { VCoordinatorDashboard } from './VCoordinatorDashboard';
@@ -7,8 +9,9 @@ import { VAdminDashboard } from './VAdminDashboard';
 
 export function DashboardPage() {
   const { data: user, status } = useAppSelector((state) => state.user);
+  const { roles } = useAuth();
 
-  if (status === 'loading' || !user) {
+  if (status === 'loading') {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
         <CircularProgress />
@@ -16,7 +19,19 @@ export function DashboardPage() {
     );
   }
 
-  const role = Array.isArray(user.role) ? user.role[0] : user.role;
+  // If user not in backend yet, show a message
+  if (!user || status === 'failed') {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Use Keycloak roles first, fallback to backend user role
+  const role = roles.length > 0
+    ? roles[0]
+    : (Array.isArray(user.role) ? user.role[0] : user.role);
 
   switch (role) {
     case 'nCoordinator':
@@ -28,6 +43,8 @@ export function DashboardPage() {
     case 'vAdmin':
     case 'sAdmin':
       return <VAdminDashboard />;
+    case 'Volunteer':
+      return <Navigate to="/explore/sessions" replace />;
     default:
       return <NCoordinatorDashboard />;
   }

@@ -1,4 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ErrorBoundary } from '@shared/components/ErrorBoundary';
 import {
   Box,
   AppBar,
@@ -61,9 +62,12 @@ export function VolunteerLayout() {
       {/* Header */}
       <AppBar position="sticky" sx={{ bgcolor: 'background.paper', color: 'text.primary' }}>
         <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, color: 'primary.main' }}>
-            Sunbird Serve
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
+            <img src="/icons/serve-logo.jpeg" alt="Sunbird Serve" style={{ height: 28, width: 28, borderRadius: 4 }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
+              Sunbird Serve
+            </Typography>
+          </Box>
 
           <IconButton onClick={handleProfileMenuOpen} aria-label="open profile menu">
             <Avatar
@@ -108,7 +112,9 @@ export function VolunteerLayout() {
 
       {/* Content */}
       <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, pb: isMobile ? 9 : 3 }}>
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </Box>
 
       {/* Mobile bottom navigation */}

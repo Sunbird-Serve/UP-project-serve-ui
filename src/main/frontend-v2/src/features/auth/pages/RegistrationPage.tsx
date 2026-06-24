@@ -19,6 +19,7 @@ import {
   Autocomplete,
 } from '@mui/material';
 import { API } from '@config/api';
+import { useAuth } from '../hooks/useAuth';
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Transgender', 'Others'];
 
@@ -65,18 +66,19 @@ interface FormData {
 export function RegistrationPage() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const navigate = useNavigate();
+  const { user: keycloakUser } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
-    firstName: '',
-    lastName: '',
+    firstName: keycloakUser?.firstName || '',
+    lastName: keycloakUser?.lastName || '',
     gender: '',
     dob: '',
     nationality: '',
     mobile: '',
-    email: localStorage.getItem('regEmail') || '',
+    email: keycloakUser?.email || localStorage.getItem('regEmail') || '',
     city: '',
     state: '',
     country: '',
@@ -137,16 +139,19 @@ export function RegistrationPage() {
           country: formData.country,
         },
       },
-      agencyId: agencyId || '',
+      agencyId: agencyId || '1-74f81200-dc16-4c65-bf7a-a3ab75952432',
       status: 'Registered',
       role: ['Volunteer'],
     };
 
     try {
       // Step 1: Create user
+      const { getAuthHeadersWithJson } = await import('@shared/utils/authHeaders');
+      const headers = getAuthHeadersWithJson();
+
       const userResponse = await fetch(`${API.USER}/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(userPayload),
       });
 
@@ -195,7 +200,7 @@ export function RegistrationPage() {
 
       const profileResponse = await fetch(`${API.USER_PROFILE}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(profilePayload),
       });
 
@@ -204,10 +209,17 @@ export function RegistrationPage() {
         console.warn('Profile creation failed, but user was created.');
       }
 
-      // Success — navigate to login
-      navigate('/login', {
-        state: { message: 'Registration successful! Please sign in to continue.' },
-      });
+      // Force token refresh to pick up the newly assigned Keycloak role
+      try {
+        const keycloak = (await import('@config/keycloak')).default;
+        await keycloak.updateToken(-1); // Force refresh by setting minValidity to -1
+      } catch {
+        // If token refresh fails, user will get the new role on next login
+        console.warn('Token refresh failed — role will be available on next login.');
+      }
+
+      // Navigate directly to volunteer explore page
+      navigate('/explore/sessions');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     } finally {
@@ -227,9 +239,12 @@ export function RegistrationPage() {
       {/* Top bar */}
       <Box sx={{ p: 2 }}>
         <Link component={RouterLink} to="/" underline="none">
-          <Typography variant="h6" fontWeight={700} color="primary.main">
-            Sunbird Serve
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <img src="/icons/serve-logo.jpeg" alt="Sunbird Serve" style={{ height: 28, width: 28, borderRadius: 4 }} />
+            <Typography variant="h6" fontWeight={700} color="primary.main">
+              Sunbird Serve
+            </Typography>
+          </Stack>
         </Link>
       </Box>
 
@@ -338,6 +353,8 @@ export function RegistrationPage() {
                           onChange={handleChange('email')}
                           required
                           fullWidth
+                          disabled={!!keycloakUser?.email}
+                          helperText={keycloakUser?.email ? 'Email from your account' : undefined}
                         />
                       </Stack>
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

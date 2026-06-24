@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -25,7 +25,10 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CloseIcon from '@mui/icons-material/Close';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useAppSelector } from '@app/store';
-import { useGetAvailableNeedsQuery, useSelfNominateMutation, AvailableNeed } from '../api/exploreApi';
+import { useSelfNominateMutation, AvailableNeed } from '../api/exploreApi';
+import { getAuthHeaders } from '@shared/utils/authHeaders';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL_NEED;
 
 function formatDays(need: AvailableNeed): string {
   const schedule = need.requirement?.schedule || need.occurrence;
@@ -35,14 +38,14 @@ function formatDays(need: AvailableNeed): string {
 
 function formatTimeSlots(need: AvailableNeed): string {
   const schedule = need.requirement?.schedule || need.occurrence;
-  const slots = schedule?.timeSlots;
+  const slots = schedule?.timeSlots || need.timeSlots;
   if (!slots || slots.length === 0) return '';
   return slots.map((s) => {
     const startMatch = s.startTime?.match(/(\d{2}):(\d{2})/);
     const endMatch = s.endTime?.match(/(\d{2}):(\d{2})/);
     const start = startMatch ? `${parseInt(startMatch[1]) % 12 || 12}:${startMatch[2]} ${parseInt(startMatch[1]) >= 12 ? 'PM' : 'AM'}` : '';
     const end = endMatch ? `${parseInt(endMatch[1]) % 12 || 12}:${endMatch[2]} ${parseInt(endMatch[1]) >= 12 ? 'PM' : 'AM'}` : '';
-    return `${s.day} ${start}–${end}`;
+    return `${start}–${end}`;
   }).join(', ');
 }
 
@@ -60,7 +63,32 @@ export function ExploreNeedsPage() {
   const user = useAppSelector((state) => state.user.data);
   const userId = user?.osid || '';
 
-  const { data: needs = [], isLoading } = useGetAvailableNeedsQuery();
+  const [needs, setNeeds] = useState<AvailableNeed[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const headers = getAuthHeaders();
+    fetch(`${BASE_URL}/api/v1/serve-need/need/?status=Approved&page=0&size=100`, {
+      ...(headers.Authorization ? { headers } : {}),
+    })
+      .then((r) => {
+        if (r.status === 401) {
+          // Backend requires auth — try with auth headers if available
+          if (headers.Authorization) return null;
+          // No token available — needs will remain empty, user sees login prompt
+          return null;
+        }
+        return r.ok ? r.json() : null;
+      })
+      .then((data) => {
+        if (data) {
+          const content = Array.isArray(data) ? data : (data.content || []);
+          setNeeds(content);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
   const [selfNominate, { isLoading: nominating }] = useSelfNominateMutation();
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
@@ -78,7 +106,8 @@ export function ExploreNeedsPage() {
       const district = (need.entity?.district || '').toLowerCase();
       const days = formatDays(need).toLowerCase();
       const skills = (need.requirement?.skillDetails || '').toLowerCase();
-      return name.includes(q) || entity.includes(q) || district.includes(q) || days.includes(q) || skills.includes(q);
+      const timeSlots = formatTimeSlots(need).toLowerCase();
+      return name.includes(q) || entity.includes(q) || district.includes(q) || days.includes(q) || skills.includes(q) || timeSlots.includes(q);
     });
   }, [needs, search]);
 
@@ -125,7 +154,7 @@ export function ExploreNeedsPage() {
       <TextField
         fullWidth
         size="small"
-        placeholder="Search by school, subject, days, location..."
+        placeholder="Search by school, subject, days, time, location..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         InputProps={{
@@ -141,8 +170,13 @@ export function ExploreNeedsPage() {
       {filteredNeeds.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="body1" color="text.secondary">
-            {search ? 'No needs match your search.' : 'No needs available right now. Check back later.'}
+            {search ? 'No needs match your search.' : userId ? 'No needs available right now. Check back later.' : 'Please login to explore available needs.'}
           </Typography>
+          {!userId && (
+            <Button variant="contained" href="/login" sx={{ mt: 2 }}>
+              Login to Explore
+            </Button>
+          )}
         </Paper>
       ) : (
         <Grid container spacing={2}>
@@ -152,6 +186,7 @@ export function ExploreNeedsPage() {
             const entityName = need.entity?.name || '';
             const district = need.entity?.district || '';
             const days = formatDays(need);
+            const timeSlots = formatTimeSlots(need);
             const alreadyNominated = nominatedIds.includes(needId);
 
             return (
@@ -178,6 +213,12 @@ export function ExploreNeedsPage() {
                       <Stack direction="row" spacing={0.5} alignItems="center">
                         <CalendarTodayIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                         <Typography variant="caption" color="text.secondary">{days}</Typography>
+                      </Stack>
+                    )}
+                    {timeSlots && (
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        <AccessTimeIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary">{timeSlots}</Typography>
                       </Stack>
                     )}
                   </Stack>
