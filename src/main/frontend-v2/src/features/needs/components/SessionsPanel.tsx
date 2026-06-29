@@ -29,6 +29,12 @@ interface Deliverable {
   status: string;
   comments?: string;
   numberOfAttendees?: number;
+  inputParameters?: {
+    startTime?: string;
+    endTime?: string;
+    inputUrl?: string;
+    softwarePlatform?: string;
+  };
 }
 
 interface InputParameter {
@@ -78,8 +84,10 @@ export function SessionsPanel({ needId }: SessionsPanelProps) {
       setLoading(true);
       setError('');
       try {
+        const { getAuthHeaders } = await import('@shared/utils/authHeaders');
+        const headers = getAuthHeaders();
         // Step 1: Get need plans for this need
-        const planResp = await fetch(`${BASE_URL}/api/v1/serve-need/need-plan/${needId}`);
+        const planResp = await fetch(`${BASE_URL}/api/v1/serve-need/need-plan/${needId}`, { headers });
         if (!planResp.ok) throw new Error('Failed to fetch need plans');
         const planData = await planResp.json();
         const plans = Array.isArray(planData) ? planData : (planData.content || []);
@@ -100,7 +108,7 @@ export function SessionsPanel({ needId }: SessionsPanelProps) {
         }
 
         // Step 2: Get deliverables for this plan
-        const delivResp = await fetch(`${BASE_URL}/api/v1/serve-need/need-deliverable/${planId}`);
+        const delivResp = await fetch(`${BASE_URL}/api/v1/serve-need/need-deliverable/${planId}`, { headers });
         if (delivResp.ok) {
           const delivData = await delivResp.json();
           setDeliverables(delivData.needDeliverable || delivData.content || []);
@@ -123,7 +131,7 @@ export function SessionsPanel({ needId }: SessionsPanelProps) {
     .sort((a, b) => a.deliverableDate.localeCompare(b.deliverableDate))
     .slice(0, 5);
 
-  const commonParams: InputParameter | null = inputParams.length > 0 ? inputParams[0] : null;
+  const commonParams: InputParameter | null = inputParams.length > 0 ? inputParams[inputParams.length - 1] : null;
 
   const startEdit = (d: Deliverable) => {
     setEditingId(d.id);
@@ -145,9 +153,10 @@ export function SessionsPanel({ needId }: SessionsPanelProps) {
     setSaving(true);
     setError('');
     try {
+      const { getAuthHeadersWithJson } = await import('@shared/utils/authHeaders');
       await fetch(`${BASE_URL}/api/v1/serve-need/need-deliverable/update/${d.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeadersWithJson(),
         body: JSON.stringify({
           needPlanId: d.needPlanId || needPlanId,
           status: editStatus,
@@ -182,7 +191,7 @@ export function SessionsPanel({ needId }: SessionsPanelProps) {
   const renderSession = (d: Deliverable, isToday: boolean) => {
     const isEditing = editingId === d.id;
     const dateStr = d.deliverableDate?.split('T')[0] || '—';
-    const params = commonParams;
+    const params = d.inputParameters || commonParams;
 
     return (
       <Paper
