@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Grid,
   Stack,
@@ -18,6 +19,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Button,
+  Alert,
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
@@ -45,12 +48,12 @@ import {
   useGetNeedsByUserIdQuery,
   useGetEntitiesByUserQuery,
   useGetAllEntitiesQuery,
-  useGetNeedsByEntitiesMutation,
   NeedItem,
 } from '../api/dashboardApi';
 import { WelcomeBanner } from '../components/WelcomeBanner';
 import { StatCard } from '../components/StatCard';
 import { StatusChip } from '../components/StatusChip';
+import { getAuthHeaders } from '@shared/utils/authHeaders';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL_NEED;
 
@@ -130,8 +133,12 @@ const PIE_COLORS = ['#3B82F6', '#10B981', '#EF4444', '#F59E0B', '#8B5CF6', '#EC4
 
 // --- Component ---
 export function NAdminDashboard() {
+  const navigate = useNavigate();
   const user = useAppSelector((state) => state.user.data);
   const userId = user?.osid || '';
+
+  // Pending approval counts
+  const [pendingCounts, setPendingCounts] = useState({ coordinators: 0, entities: 0, needs: 0 });
   const userName = user?.identityDetails?.fullname || user?.identityDetails?.name || 'Admin';
   const isSAdmin = user?.role?.includes('sAdmin');
 
@@ -163,21 +170,14 @@ export function NAdminDashboard() {
     return `${y}-${y + 1}`;
   });
 
-  // Needs data
+  // Needs data — fetch by status, filter by nAdmin's entities
   const { data: allNeeds = [], isLoading: needsLoading } = useGetNeedsByUserIdQuery(userId, {
     skip: !userId,
   });
-  const [fetchEntityNeeds, { data: entityNeeds, isLoading: entityNeedsLoading }] =
-    useGetNeedsByEntitiesMutation();
 
-  useEffect(() => {
-    if (selectedEntities.length > 0) {
-      fetchEntityNeeds(selectedEntities);
-    }
-  }, [selectedEntities, fetchEntityNeeds]);
-
-  const needs: NeedItem[] = entityNeeds || allNeeds;
-  const needsLoaded = !needsLoading && !entityNeedsLoading;
+  // Use allNeeds filtered by selectedEntities (no POST /need/entities needed)
+  const needs: NeedItem[] = allNeeds;
+  const needsLoaded = !needsLoading;
 
   // Filter needs by year
   const filteredNeeds = useMemo(() => {
@@ -221,84 +221,85 @@ export function NAdminDashboard() {
         const { getAuthHeaders } = await import('@shared/utils/authHeaders');
         const headers = getAuthHeaders();
 
-        // Get assigned needs, then fetch fulfillments per need
-        const needsResp = await fetch(
-          `${BASE_URL}/api/v1/serve-need/need/?status=Assigned&page=0&size=200`,
+        // Get nAdmin's entity IDs
+        const entityResp = await fetch(
+          `${BASE_URL}/api/v1/serve-need/entityDetails/${userId}?page=0&size=1000`,
           { headers },
         );
-        let assignedNeeds: { id: string }[] = [];
-        if (needsResp.ok) {
-          const needsData = await needsResp.json();
-          const content = Array.isArray(needsData) ? needsData : (needsData.content || []);
-          assignedNeeds = content.map((n: Record<string, unknown>) => ({
-            id: (n.id as string) || ((n.need as Record<string, unknown>)?.id as string) || '',
-          })).filter((n: { id: string }) => n.id);
+        let myEntityIds: string[] = [];
+        if (entityResp.ok) {
+          const entityData = await entityResp.json();
+          const ents = Array.isArray(entityData) ? entityData : (entityData.content || []);
+          myEntityIds = ents.map((e: { id: string }) => e.id);
         }
 
-        // Fetch fulfillments per need via /fulfillment/need-read/{needId}
-        let fulfs: { needId: string; needPlanId: string; assignedUserId: string }[] = [];
-        for (const need of assignedNeeds.slice(0, 30)) {
-          try {
-            const fulfResp = await fetch(
-              `${BASE_URL}/api/v1/serve-fulfill/fulfillment/need-read/${need.id}`,
-              { headers },
-            );
-            if (fulfResp.ok) {
-              const fulfData = await fulfResp.json();
-              const items = Array.isArray(fulfData) ? fulfData : (fulfData.content || []);
-              fulfs.push(...items);
-            }
-          } catch { /* skip */ }
+        if (myEntityIds.length === 0) {
+          setSessionsLoading(false);
+          return;
         }
 
-        // Fallback: try coordinator-read
-        if (fulfs.length === 0) {
-          try {
-            const coordResp = await fetch(
-              `${BASE_URL}/api/v1/serve-fulfill/fulfillment/coordinator-read/${userId}?page=0&size=1000`,
-              { headers },
-            );
-            if (coordResp.ok) {
-              const coordData = await coordResp.json();
-              const items = Array.isArray(coordData) ? coordData : (coordData.content || []);
-              fulfs.push(...items);
-            }
-          } catch { /* skip */ }
-        }
-
-        const sessionResults: SessionData[] = [];
-        for (const fulf of fulfs.slice(0, 50)) {
-          try {
-            // Check plan status — skip inactive (backfilled) plans
-            const planCheckResp = await fetch(
-              `${BASE_URL}/api/v1/serve-need/need-plan/${fulf.needId}`,
-              { headers },
-            );
-            if (planCheckResp.ok) {
-              const planCheckData = await planCheckResp.json();
-              const plans = Array.isArray(planCheckData) ? planCheckData : (planCheckData.content || []);
-              const matchingPlan = plans.find((p: Record<string, unknown>) => (p?.plan as Record<string, unknown>)?.id === fulf.needPlanId || p?.id === fulf.needPlanId);
-              const status = (matchingPlan?.plan as Record<string, unknown>)?.status as string || matchingPlan?.status as string || '';
-              if (status === 'Inactive') continue;
-            }
-
-            const delivResp = await fetch(
-              `${BASE_URL}/api/v1/serve-need/need-deliverable/${fulf.needPlanId}`,
-              { headers },
-            );
-            if (delivResp.ok) {
-              const delivData = await delivResp.json();
-              const deliverables = delivData.needDeliverable || delivData.content || [];
-              if (deliverables.length > 0) {
-                sessionResults.push({
-                  fulfillment: fulf,
-                  deliverables: Array.isArray(deliverables) ? deliverables : [],
-                });
+        // Get assigned/fulfilled needs, filtered by entity
+        const statuses = ['Assigned', 'Fulfilled'];
+        let assignedNeeds: { id: string; name: string }[] = [];
+        const statusResults = await Promise.allSettled(
+          statuses.map((status) =>
+            fetch(`${BASE_URL}/api/v1/serve-need/need/?status=${status}&page=0&size=200`, { headers })
+              .then((r) => (r.ok ? r.json() : null)),
+          ),
+        );
+        for (const result of statusResults) {
+          if (result.status === 'fulfilled' && result.value) {
+            const content = Array.isArray(result.value) ? result.value : (result.value.content || []);
+            for (const n of content) {
+              const id = (n.id as string) || ((n.need as Record<string, unknown>)?.id as string) || '';
+              const name = (n.name as string) || ((n.need as Record<string, unknown>)?.name as string) || '';
+              const entityId = (n.entityId as string) || ((n.need as Record<string, unknown>)?.entityId as string) || '';
+              if (id && myEntityIds.includes(entityId)) {
+                assignedNeeds.push({ id, name });
               }
             }
-          } catch {
-            // skip
           }
+        }
+        // Deduplicate
+        assignedNeeds = [...new Map(assignedNeeds.map((n) => [n.id, n])).values()];
+
+        // For each need → get plans → get deliverables
+        const sessionResults: SessionData[] = [];
+        for (const need of assignedNeeds.slice(0, 50)) {
+          try {
+            const planResp = await fetch(
+              `${BASE_URL}/api/v1/serve-need/need-plan/${need.id}`,
+              { headers },
+            );
+            if (!planResp.ok) continue;
+
+            const planData = await planResp.json();
+            const plans = Array.isArray(planData) ? planData : (planData.content || []);
+
+            for (const p of plans) {
+              const planId = (p?.plan as Record<string, unknown>)?.id as string || p?.id as string || '';
+              const planStatus = (p?.plan as Record<string, unknown>)?.status as string || p?.status as string || '';
+              if (!planId || planStatus === 'Inactive') continue;
+
+              try {
+                const delivResp = await fetch(
+                  `${BASE_URL}/api/v1/serve-need/need-deliverable/${planId}`,
+                  { headers },
+                );
+                if (delivResp.ok) {
+                  const delivData = await delivResp.json();
+                  const deliverables = delivData.needDeliverable || delivData.content || [];
+                  if (Array.isArray(deliverables) && deliverables.length > 0) {
+                    sessionResults.push({
+                      fulfillment: { needId: need.id, needPlanId: planId, assignedUserId: '' },
+                      deliverables,
+                      needName: need.name,
+                    });
+                  }
+                }
+              } catch { /* skip */ }
+            }
+          } catch { /* skip */ }
         }
         setSessions(sessionResults);
       } catch {
@@ -309,6 +310,37 @@ export function NAdminDashboard() {
     }
     fetchSessions();
   }, [userId]);
+
+  // Fetch pending approval counts
+  useEffect(() => {
+    async function fetchPendingCounts() {
+      if (!userId) return;
+      try {
+        const headers = getAuthHeaders();
+        // Pending entities
+        const entResp = await fetch(`${BASE_URL}/api/v1/serve-need/entityDetails/${userId}?page=0&size=1000`, { headers });
+        let pendingEnts = 0;
+        if (entResp.ok) {
+          const data = await entResp.json();
+          const ents = Array.isArray(data) ? data : (data.content || []);
+          pendingEnts = ents.filter((e: { status?: string }) => e.status === 'New' || e.status === 'Verified').length;
+        }
+        // Pending coordinators
+        const usersResp = await fetch(`${BASE_URL}/api/v1/serve-volunteering/user/all-users`, { headers });
+        let pendingCoords = 0;
+        if (usersResp.ok) {
+          const users = await usersResp.json();
+          if (Array.isArray(users)) {
+            pendingCoords = users.filter((u: { role?: string[]; status?: string }) => u.role?.includes('nCoordinator') && u.status === 'Registered').length;
+          }
+        }
+        // Pending needs (already have from needs data)
+        const pendingNeedsCount = needs.filter((n) => n.status === 'New').length;
+        setPendingCounts({ coordinators: pendingCoords, entities: pendingEnts, needs: pendingNeedsCount });
+      } catch { /* silent */ }
+    }
+    fetchPendingCounts();
+  }, [userId, needs]);
 
   // Filter deliverables by period
   const sessionStats = useMemo(() => {
@@ -387,6 +419,25 @@ export function NAdminDashboard() {
         name={userName}
         subtitle={`Managing ${entities.length} entities · AY ${selectedYear}`}
       />
+
+      {/* Action Required Banner */}
+      {(pendingCounts.coordinators + pendingCounts.entities + pendingCounts.needs) > 0 && (
+        <Alert
+          severity="warning"
+          action={
+            <Button size="small" color="inherit" onClick={() => navigate('/app/approvals')}>
+              Go to Approvals →
+            </Button>
+          }
+        >
+          <strong>Action Required:</strong>{' '}
+          {pendingCounts.coordinators > 0 && `${pendingCounts.coordinators} coordinator${pendingCounts.coordinators > 1 ? 's' : ''} pending`}
+          {pendingCounts.coordinators > 0 && (pendingCounts.entities > 0 || pendingCounts.needs > 0) && ' · '}
+          {pendingCounts.entities > 0 && `${pendingCounts.entities} entit${pendingCounts.entities > 1 ? 'ies' : 'y'} pending`}
+          {pendingCounts.entities > 0 && pendingCounts.needs > 0 && ' · '}
+          {pendingCounts.needs > 0 && `${pendingCounts.needs} need${pendingCounts.needs > 1 ? 's' : ''} pending`}
+        </Alert>
+      )}
 
       {/* Filters Row */}
       <Paper sx={{ p: 2 }}>

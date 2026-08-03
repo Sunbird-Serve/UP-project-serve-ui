@@ -88,12 +88,15 @@ export const ROLE_CONFIG: Record<UserRole, RoleConfig> = {
   },
   nAdmin: {
     label: 'Need Admin',
-    defaultRoute: '/app/dashboard',
+    defaultRoute: '/app/approvals',
     layout: 'admin',
     sidebarItems: [
+      { id: 'approvals', label: 'Approvals', path: '/app/approvals', icon: 'FactCheck' },
+      { id: 'onboarding-requests', label: 'Onboarding', path: '/app/onboarding-requests', icon: 'HowToReg' },
       { id: 'dashboard', label: 'Dashboard', path: '/app/dashboard', icon: 'Dashboard' },
       { id: 'needs', label: 'Needs', path: '/app/needs', icon: 'Assignment' },
       { id: 'entities', label: 'Entities', path: '/app/entities', icon: 'Business' },
+      { id: 'coordinators', label: 'Coordinators', path: '/app/coordinators', icon: 'People' },
       { id: 'sessions', label: 'Sessions', path: '/app/sessions', icon: 'CalendarMonth' },
       { id: 'settings', label: 'Settings', path: '/app/settings', icon: 'Settings' },
     ],
@@ -136,6 +139,7 @@ export const ROLE_CONFIG: Record<UserRole, RoleConfig> = {
     layout: 'admin',
     sidebarItems: [
       { id: 'dashboard', label: 'Dashboard', path: '/app/dashboard', icon: 'Dashboard' },
+      { id: 'onboarding-requests', label: 'Onboarding', path: '/app/onboarding-requests', icon: 'HowToReg' },
       { id: 'needs', label: 'Needs', path: '/app/needs', icon: 'Assignment' },
       { id: 'volunteers', label: 'Volunteers', path: '/app/volunteers', icon: 'People' },
       { id: 'entities', label: 'Entities', path: '/app/entities', icon: 'Business' },
