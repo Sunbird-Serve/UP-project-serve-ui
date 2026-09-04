@@ -98,6 +98,8 @@ export const ROLE_CONFIG: Record<UserRole, RoleConfig> = {
       { id: 'entities', label: 'Entities', path: '/app/entities', icon: 'Business' },
       { id: 'coordinators', label: 'Coordinators', path: '/app/coordinators', icon: 'People' },
       { id: 'sessions', label: 'Sessions', path: '/app/sessions', icon: 'CalendarMonth' },
+      { id: 'my-agency', label: 'My Agency', path: '/app/my-agency', icon: 'CorporateFare' },
+      { id: 'agency-scope', label: 'Agency Scope', path: '/app/agency-scope', icon: 'Visibility' },
       { id: 'settings', label: 'Settings', path: '/app/settings', icon: 'Settings' },
     ],
     permissions: [
@@ -120,7 +122,8 @@ export const ROLE_CONFIG: Record<UserRole, RoleConfig> = {
     sidebarItems: [
       { id: 'dashboard', label: 'Dashboard', path: '/app/dashboard', icon: 'Dashboard' },
       { id: 'volunteers', label: 'Volunteers', path: '/app/volunteers', icon: 'People' },
-      { id: 'agencies', label: 'Agencies', path: '/app/agencies', icon: 'Business' },
+      { id: 'my-agency', label: 'My Agency', path: '/app/my-agency', icon: 'CorporateFare' },
+      { id: 'agency-scope', label: 'Agency Scope', path: '/app/agency-scope', icon: 'Visibility' },
       { id: 'settings', label: 'Settings', path: '/app/settings', icon: 'Settings' },
     ],
     permissions: [
@@ -140,6 +143,8 @@ export const ROLE_CONFIG: Record<UserRole, RoleConfig> = {
     sidebarItems: [
       { id: 'dashboard', label: 'Dashboard', path: '/app/dashboard', icon: 'Dashboard' },
       { id: 'onboarding-requests', label: 'Onboarding', path: '/app/onboarding-requests', icon: 'HowToReg' },
+      { id: 'create-user', label: 'Create User', path: '/app/create-user', icon: 'PersonAdd' },
+      { id: 'coordinators', label: 'Coordinators', path: '/app/coordinators', icon: 'People' },
       { id: 'needs', label: 'Needs', path: '/app/needs', icon: 'Assignment' },
       { id: 'volunteers', label: 'Volunteers', path: '/app/volunteers', icon: 'People' },
       { id: 'entities', label: 'Entities', path: '/app/entities', icon: 'Business' },

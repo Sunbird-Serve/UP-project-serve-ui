@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -17,6 +17,7 @@ import {
   MenuItem,
   Chip,
   Autocomplete,
+  CircularProgress,
 } from '@mui/material';
 import { API } from '@config/api';
 import { useAuth } from '../hooks/useAuth';
@@ -66,10 +67,27 @@ interface FormData {
 export function RegistrationPage() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const navigate = useNavigate();
-  const { user: keycloakUser } = useAuth();
+  const { user: keycloakUser, authenticated, initialized } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Step 1: If not authenticated, store agencyId and redirect to Keycloak registration
+  useEffect(() => {
+    if (!initialized) return;
+    if (!authenticated) {
+      // Save agencyId for after Keycloak redirect
+      if (agencyId) {
+        localStorage.setItem('pendingRegistrationAgencyId', agencyId);
+      }
+      // Trigger Keycloak registration
+      import('@config/keycloak').then((mod) => {
+        mod.default.register({
+          redirectUri: window.location.href,
+        });
+      });
+    }
+  }, [initialized, authenticated, agencyId]);
 
   const [formData, setFormData] = useState<FormData>({
     firstName: keycloakUser?.firstName || '',
@@ -78,7 +96,7 @@ export function RegistrationPage() {
     dob: '',
     nationality: '',
     mobile: '',
-    email: keycloakUser?.email || localStorage.getItem('regEmail') || '',
+    email: keycloakUser?.email || '',
     city: '',
     state: '',
     country: '',
@@ -87,6 +105,18 @@ export function RegistrationPage() {
     qualification: '',
     employmentStatus: '',
   });
+
+  // Update form with Keycloak user info once authenticated
+  useEffect(() => {
+    if (authenticated && keycloakUser) {
+      setFormData((prev) => ({
+        ...prev,
+        firstName: prev.firstName || keycloakUser.firstName || '',
+        lastName: prev.lastName || keycloakUser.lastName || '',
+        email: keycloakUser.email || prev.email,
+      }));
+    }
+  }, [authenticated, keycloakUser]);
 
   const handleChange = (field: keyof FormData) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -122,6 +152,9 @@ export function RegistrationPage() {
     setError('');
     setLoading(true);
 
+    // Resolve agencyId from URL or localStorage (saved before Keycloak redirect)
+    const effectiveAgencyId = agencyId || localStorage.getItem('pendingRegistrationAgencyId') || '1-74f81200-dc16-4c65-bf7a-a3ab75952432';
+
     const userPayload = {
       identityDetails: {
         fullname: formData.firstName,
@@ -139,13 +172,12 @@ export function RegistrationPage() {
           country: formData.country,
         },
       },
-      agencyId: agencyId || '1-74f81200-dc16-4c65-bf7a-a3ab75952432',
+      agencyId: effectiveAgencyId,
       status: 'Registered',
       role: ['Volunteer'],
     };
 
     try {
-      // Step 1: Create user
       const { getAuthHeadersWithJson } = await import('@shared/utils/authHeaders');
       const headers = getAuthHeadersWithJson();
 
@@ -166,7 +198,7 @@ export function RegistrationPage() {
         throw new Error('User created but no ID returned.');
       }
 
-      // Step 2: Create user profile
+      // Create user profile
       const profilePayload = {
         skills: [],
         genericDetails: {
@@ -181,7 +213,7 @@ export function RegistrationPage() {
           interestArea: formData.interests,
           language: formData.languages,
         },
-        agencyId: agencyId || '',
+        agencyId: effectiveAgencyId,
         userId,
         onboardDetails: {
           onboardStatus: [{ onboardStep: 'Discussion', status: 'completed' }],
@@ -198,27 +230,21 @@ export function RegistrationPage() {
         volunteeringHours: { totalHours: 0, hoursPerWeek: 0 },
       };
 
-      const profileResponse = await fetch(`${API.USER_PROFILE}`, {
+      await fetch(`${API.USER_PROFILE}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(profilePayload),
       });
 
-      if (!profileResponse.ok) {
-        // Profile creation failed but user was created — still consider it a partial success
-        console.warn('Profile creation failed, but user was created.');
-      }
+      // Clean up localStorage
+      localStorage.removeItem('pendingRegistrationAgencyId');
 
-      // Force token refresh to pick up the newly assigned Keycloak role
+      // Force token refresh
       try {
         const keycloak = (await import('@config/keycloak')).default;
-        await keycloak.updateToken(-1); // Force refresh by setting minValidity to -1
-      } catch {
-        // If token refresh fails, user will get the new role on next login
-        console.warn('Token refresh failed — role will be available on next login.');
-      }
+        await keycloak.updateToken(-1);
+      } catch { /* role will be available on next login */ }
 
-      // Navigate directly to volunteer explore page
       navigate('/explore/sessions');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
@@ -226,6 +252,20 @@ export function RegistrationPage() {
       setLoading(false);
     }
   };
+
+  // Show loading while waiting for Keycloak init or redirecting to Keycloak
+  if (!initialized || !authenticated) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Stack spacing={2} alignItems="center">
+          <CircularProgress size={40} />
+          <Typography variant="body1" color="text.secondary">
+            Setting up your account...
+          </Typography>
+        </Stack>
+      </Box>
+    );
+  }
 
   return (
     <Box

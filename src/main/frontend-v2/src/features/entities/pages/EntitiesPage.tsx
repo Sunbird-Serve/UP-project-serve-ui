@@ -47,6 +47,7 @@ interface Entity {
   mobile?: string;
   addressLine1?: string;
   address_line1?: string;
+  block?: string;
   district?: string;
   state?: string;
   pincode?: string;
@@ -59,6 +60,7 @@ interface NCoordinator {
   identityDetails?: { fullname?: string; name?: string };
   contactDetails?: { email?: string; mobile?: string };
   role?: string[];
+  agencyId?: string;
 }
 
 const STATUS_TABS = ['All', 'New', 'Verified', 'Active', 'Inactive'];
@@ -95,7 +97,7 @@ export function EntitiesPage() {
   // Form state
   const [form, setForm] = useState({
     name: '', registrationId: '', website: '', mobile: '',
-    addressLine1: '', district: '', state: '', pincode: '',
+    block: '', district: '', state: '', pincode: '',
     category: 'School', status: 'New',
   });
 
@@ -139,7 +141,7 @@ export function EntitiesPage() {
         if (resp.ok) {
           const users = await resp.json();
           const coordinators = (Array.isArray(users) ? users : []).filter(
-            (u: NCoordinator) => u.role?.includes('nCoordinator'),
+            (u: NCoordinator) => u.role?.includes('nCoordinator') || (isSAdmin && u.role?.includes('nAdmin')),
           );
           setNCoordinators(coordinators);
         }
@@ -161,7 +163,7 @@ export function EntitiesPage() {
       result = result.filter((e) =>
         (e.name || '').toLowerCase().includes(q) ||
         (e.district || '').toLowerCase().includes(q) ||
-        (e.addressLine1 || e.address_line1 || '').toLowerCase().includes(q) ||
+        (e.block || e.addressLine1 || e.address_line1 || '').toLowerCase().includes(q) ||
         (e.registrationId || '').toLowerCase().includes(q),
       );
     }
@@ -173,7 +175,7 @@ export function EntitiesPage() {
   // Handlers
   const handleCreate = () => {
     setEditEntity(null);
-    setForm({ name: '', registrationId: '', website: '', mobile: '', addressLine1: '', district: '', state: '', pincode: '', category: 'School', status: 'New' });
+    setForm({ name: '', registrationId: '', website: '', mobile: '', block: '', district: '', state: '', pincode: '', category: 'School', status: 'New' });
     setDialogOpen(true);
     setError('');
   };
@@ -185,7 +187,7 @@ export function EntitiesPage() {
       registrationId: entity.registrationId || '',
       website: entity.website || '',
       mobile: entity.mobile || '',
-      addressLine1: entity.addressLine1 || entity.address_line1 || '',
+      block: entity.block || entity.addressLine1 || entity.address_line1 || '',
       district: entity.district || '',
       state: entity.state || '',
       pincode: entity.pincode || '',
@@ -239,7 +241,21 @@ export function EntitiesPage() {
     setAssigning(true); setError('');
     try {
       const { getAuthHeadersWithJson } = await import('@shared/utils/authHeaders');
+
+      // Refresh token before making the call
+      try {
+        const keycloak = (await import('@config/keycloak')).default;
+        await keycloak.updateToken(30);
+      } catch { /* proceed with existing token */ }
+
       const headers = getAuthHeadersWithJson();
+
+      // Determine the coordinator's role (prefer nCoordinator, else nAdmin)
+      const coordRole = selectedCoordinator.role?.includes('nCoordinator')
+        ? 'nCoordinator'
+        : selectedCoordinator.role?.includes('nAdmin')
+          ? 'nAdmin'
+          : (selectedCoordinator.role?.[0] || 'nCoordinator');
 
       const resp = await fetch(`${BASE_URL}/api/v1/serve-need/entity/assign`, {
         method: 'POST',
@@ -247,6 +263,8 @@ export function EntitiesPage() {
         body: JSON.stringify({
           entityId: assignEntityId,
           userId: selectedCoordinator.osid,
+          agencyId: selectedCoordinator.agencyId || user?.agencyId || '',
+          userRole: coordRole,
         }),
       });
       if (resp.ok) {
@@ -331,7 +349,7 @@ export function EntitiesPage() {
                       <Typography variant="caption">{entity.mobile || '—'}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="caption">{entity.addressLine1 || entity.address_line1 || '—'}</Typography>
+                      <Typography variant="caption">{entity.block || entity.addressLine1 || entity.address_line1 || '—'}</Typography>
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption">{entity.district || '—'}</Typography>
@@ -392,7 +410,7 @@ export function EntitiesPage() {
               <TextField label="Website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} fullWidth size="small" InputLabelProps={{ shrink: true }} />
             </Grid>
             <Grid item xs={12}>
-              <TextField label="Address / Block" value={form.addressLine1} onChange={(e) => setForm({ ...form, addressLine1: e.target.value })} fullWidth size="small" InputLabelProps={{ shrink: true }} />
+              <TextField label="Block" value={form.block} onChange={(e) => setForm({ ...form, block: e.target.value })} fullWidth size="small" InputLabelProps={{ shrink: true }} />
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField label="District" value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} fullWidth size="small" InputLabelProps={{ shrink: true }} />
@@ -426,7 +444,7 @@ export function EntitiesPage() {
       {/* Assign nCoordinator Dialog */}
       <Dialog open={assignDialogOpen} onClose={() => setAssignDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          Assign nCoordinator
+          Assign Coordinator
         </DialogTitle>
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -437,7 +455,7 @@ export function EntitiesPage() {
             </Paper>
             <Divider />
             <Typography variant="body2" color="text.secondary">
-              Select an nCoordinator to assign to this entity:
+              Select a Coordinator to assign to this entity:
             </Typography>
             <Autocomplete
               options={nCoordinators}
