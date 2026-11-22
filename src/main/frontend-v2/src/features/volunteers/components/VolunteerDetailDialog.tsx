@@ -20,15 +20,17 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { StatusChip } from '@features/dashboard/components/StatusChip';
+import { useAppSelector } from '@app/store';
 import {
   VolunteerUser,
   Agency,
   useUpdateVolunteerStatusMutation,
   useAssignAgencyMutation,
+  statusOptionsForRole,
 } from '../api/volunteersApi';
+import { apiUrl } from '@shared/utils/apiUrls';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL_NEED;
-const STATUS_OPTIONS = ['Registered', 'Recommended', 'OnHold', 'Active'];
 
 interface NominationInfo {
   id: string;
@@ -49,6 +51,9 @@ interface VolunteerDetailDialogProps {
 }
 
 export function VolunteerDetailDialog({ volunteer, agencies, isAdmin, onClose }: VolunteerDetailDialogProps) {
+  const currentUser = useAppSelector((state) => state.user.data);
+  const currentRole = Array.isArray(currentUser?.role) ? currentUser?.role[0] : currentUser?.role;
+  const statusOptions = statusOptionsForRole(currentRole);
   const [updateStatus, { isLoading: statusSaving }] = useUpdateVolunteerStatusMutation();
   const [assignAgency, { isLoading: agencySaving }] = useAssignAgencyMutation();
 
@@ -82,7 +87,7 @@ export function VolunteerDetailDialog({ volunteer, agencies, isAdmin, onClose }:
         const headers = getAuthHeaders();
 
         // Fetch nominations
-        const nomResp = await fetch(`${BASE_URL}/api/v1/serve-fulfill/nomination/${volunteer.osid}?page=0&size=50`, { headers });
+        const nomResp = await fetch(apiUrl(`/api/v1/serve-fulfill/nomination/${volunteer.osid}?page=0&size=50`), { headers });
         let noms: { id: string; needId: string; nominationStatus: string }[] = [];
         if (nomResp.ok) {
           const nomData = await nomResp.json();
@@ -90,7 +95,7 @@ export function VolunteerDetailDialog({ volunteer, agencies, isAdmin, onClose }:
         }
 
         // Also fetch fulfillments (assigned needs)
-        const fulfResp = await fetch(`${BASE_URL}/api/v1/serve-fulfill/fulfillment/volunteer-read/${volunteer.osid}?page=0&size=50`, { headers });
+        const fulfResp = await fetch(apiUrl(`/api/v1/serve-fulfill/fulfillment/volunteer-read/${volunteer.osid}?page=0&size=50`), { headers });
         let fulfs: { needId: string }[] = [];
         if (fulfResp.ok) {
           const fulfData = await fulfResp.json();
@@ -194,7 +199,7 @@ export function VolunteerDetailDialog({ volunteer, agencies, isAdmin, onClose }:
     if (!newStatus || newStatus === volunteer.status) return;
     setError('');
     try {
-      await updateStatus({ userId: volunteer.osid, status: newStatus }).unwrap();
+      await updateStatus({ user: volunteer, status: newStatus }).unwrap();
       setSuccess('Status updated.');
       setTimeout(() => setSuccess(''), 3000);
     } catch {
@@ -282,7 +287,7 @@ export function VolunteerDetailDialog({ volunteer, agencies, isAdmin, onClose }:
                   select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}
                   size="small" sx={{ minWidth: 180 }} InputLabelProps={{ shrink: true }}
                 >
-                  {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+                  {statusOptions.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                 </TextField>
                 <Button variant="contained" size="small" onClick={handleStatusSave} disabled={statusSaving || newStatus === volunteer.status}>
                   {statusSaving ? 'Saving...' : 'Update'}

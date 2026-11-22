@@ -32,12 +32,17 @@ import {
   useGetAgenciesQuery,
   useUpdateVolunteerStatusMutation,
   useAssignAgencyMutation,
+  statusOptionsForRole,
   VolunteerUser,
 } from '../api/volunteersApi';
 import { getAuthHeaders } from '@shared/utils/authHeaders';
+import { apiUrl } from '@shared/utils/apiUrls';
+import { useAuth } from '@features/auth/hooks/useAuth';
+import { useGetVolunteerProfileQuery } from '@features/explore/api/exploreApi';
+import { DeleteUserDialog, DeleteProfileDialog } from '../components/DeleteDialogs';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL_NEED;
-const STATUS_OPTIONS = ['Registered', 'Recommended', 'OnHold', 'Active'];
 
 // --- Types ---
 interface Assignment {
@@ -69,6 +74,16 @@ export function VolunteerJourneyPage() {
   const user = useAppSelector((state) => state.user.data);
   const role = Array.isArray(user?.role) ? user?.role[0] : user?.role;
   const isAdmin = role === 'vAdmin' || role === 'sAdmin';
+  const statusOptions = statusOptionsForRole(role);
+
+  // Only super admins may delete users or profiles
+  const { roles: authRoles } = useAuth();
+  const isSuperAdmin = authRoles.includes('sAdmin');
+  const [deleteUserOpen, setDeleteUserOpen] = useState(false);
+  const [deleteProfileOpen, setDeleteProfileOpen] = useState(false);
+  // The profile record (its own id is needed to delete it)
+  const { data: volunteerProfile } = useGetVolunteerProfileQuery(id || '', { skip: !id || !isSuperAdmin });
+  const profileId = volunteerProfile?.osid || '';
 
   const { data: allUsers = [], isLoading: usersLoading } = useGetAllVolunteersQuery();
   const { data: agencies = [] } = useGetAgenciesQuery();
@@ -108,7 +123,7 @@ export function VolunteerJourneyPage() {
 
         // Get fulfillments (assignments)
         const fulfResp = await fetch(
-          `${BASE_URL}/api/v1/serve-fulfill/fulfillment/volunteer-read/${id}?page=0&size=100`,
+          apiUrl(`/api/v1/serve-fulfill/fulfillment/volunteer-read/${id}?page=0&size=100`),
           { headers },
         );
         let fulfs: { needId: string; needPlanId: string }[] = [];
@@ -240,7 +255,7 @@ export function VolunteerJourneyPage() {
     if (!volunteer || !newStatus || newStatus === volunteer.status) return;
     setError('');
     try {
-      await updateStatus({ userId: volunteer.osid, status: newStatus }).unwrap();
+      await updateStatus({ user: volunteer, status: newStatus }).unwrap();
       setSuccess('Status updated.');
       setTimeout(() => setSuccess(''), 3000);
     } catch { setError('Failed to update status.'); }
@@ -342,7 +357,7 @@ export function VolunteerJourneyPage() {
               label="Status"
               InputLabelProps={{ shrink: true }}
             >
-              {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {statusOptions.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </TextField>
             <Button
               variant="contained"
@@ -373,6 +388,24 @@ export function VolunteerJourneyPage() {
                   disabled={agencySaving || !newAgencyId}
                 >
                   {agencySaving ? '...' : 'Assign'}
+                </Button>
+              </>
+            )}
+            {isSuperAdmin && (
+              <>
+                {profileId && (
+                  <Button variant="outlined" color="error" size="small" onClick={() => setDeleteProfileOpen(true)}>
+                    Delete profile
+                  </Button>
+                )}
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  startIcon={<DeleteOutlineIcon />}
+                  onClick={() => setDeleteUserOpen(true)}
+                >
+                  Delete user
                 </Button>
               </>
             )}
@@ -566,6 +599,30 @@ export function VolunteerJourneyPage() {
             ))}
           </Stack>
         </Paper>
+      )}
+
+      {isSuperAdmin && (
+        <>
+          <DeleteUserDialog
+            user={deleteUserOpen ? volunteer : null}
+            onClose={() => setDeleteUserOpen(false)}
+            onDone={(message) => {
+              setDeleteUserOpen(false);
+              navigate('/app/volunteers', { state: { notice: message } });
+            }}
+          />
+          <DeleteProfileDialog
+            open={deleteProfileOpen}
+            name={name}
+            profileId={profileId}
+            onClose={() => setDeleteProfileOpen(false)}
+            onDone={(message) => {
+              setDeleteProfileOpen(false);
+              setSuccess(message);
+              setTimeout(() => setSuccess(''), 4000);
+            }}
+          />
+        </>
       )}
     </Box>
   );
